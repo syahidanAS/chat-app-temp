@@ -77,6 +77,6 @@ function broadcast(data) {
   });
 }
 
-server.listen(3000, () => {
-  console.log("http://localhost:3000");
+server.listen(5505, () => {
+  console.log("http://localhost:5505");
 });
