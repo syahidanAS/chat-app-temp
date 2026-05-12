@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  chat-app:
+    build: .
+    container_name: chat-app
+    ports:
+      - "5505:5505"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - .:/app
+      - /app/node_modules
