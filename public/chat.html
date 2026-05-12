@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat Room Pro</title>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+* {
+  box-sizing: border-box;
+  font-family: 'Inter', sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #0f172a;
+  color: white;
+  overscroll-behavior: none;
+}
+
+/* HEADER */
+.header {
+  height: 60px;
+  background: rgba(255,255,255,0.05);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.header .title { font-weight: 600; }
+.header .user { font-size: 13px; opacity: 0.8; }
+
+/* CHAT */
+#chat {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* BUBBLE */
+.bubble {
+  max-width: 65%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  animation: fadeIn 0.2s ease;
+}
+
+.me {
+  align-self: flex-end;
+  background: linear-gradient(135deg, #4cafef, #6366f1);
+  border-bottom-right-radius: 4px;
+}
+
+.other {
+  align-self: flex-start;
+  background: rgba(255,255,255,0.08);
+  border-bottom-left-radius: 4px;
+}
+
+.system {
+  align-self: center;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+/* INPUT */
+.input-box {
+  display: flex;
+  padding: 15px;
+  gap: 10px;
+  background: rgba(255,255,255,0.05);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  position: sticky;
+  bottom: 0;
+}
+
+input {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+
+button {
+  padding: 12px 18px;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4cafef, #6366f1);
+  color: white;
+  font-weight: 600;
+}
+
+/* ================= TOAST NOTIFICATION ================= */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 9999;
+}
+
+.toast {
+  background: rgba(30, 41, 59, 0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 12px 14px;
+  border-radius: 10px;
+  min-width: 220px;
+  max-width: 300px;
+  color: white;
+  font-size: 13px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+  animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s forwards;
+}
+
+.toast strong {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateX(100%); }
+}
+
+/* CHAT ANIMATION */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* MOBILE */
+@media (max-width: 768px) {
+  .bubble { max-width: 85%; }
+  #toast-container {
+    right: 10px;
+    left: 10px;
+    top: 10px;
+  }
+  .toast {
+    width: 100%;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div id="toast-container"></div>
+
+<div class="header">
+  <div class="title">💬 Chat Room</div>
+  <div class="user" id="userInfo"></div>
+</div>
+
+<div id="chat"></div>
+
+<div class="input-box">
+  <input id="msg" placeholder="Tulis pesan...">
+  <button onclick="send()">Kirim</button>
+</div>
+
+<script>
+const username = localStorage.getItem("username");
+
+if (!username) {
+  window.location.href = "login.html";
+}
+
+document.getElementById("userInfo").innerText = "Login sebagai: " + username;
+
+const ws = new WebSocket("ws://localhost:3000");
+
+// ================= AUDIO =================
+let audioUnlocked = false;
+
+const sound = new Audio("https://www.myinstants.com/media/sounds/hidup-jokowi.mp3");
+sound.volume = 0.5;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+
+  sound.play().then(() => {
+    sound.pause();
+    sound.currentTime = 0;
+    audioUnlocked = true;
+  }).catch(() => {});
+}
+
+// ================= CUSTOM TOAST =================
+function showToast(title, message) {
+  const container = document.getElementById("toast-container");
+
+  const toast = document.createElement("div");
+  toast.className = "toast";
+
+  toast.innerHTML = `
+    <strong>${title}</strong>
+    <span>${message}</span>
+  `;
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.remove();
+  }, 3000);
+}
+
+// ================= NOTIF =================
+function notify(title, message) {
+
+  // toast (CUSTOM ALERT)
+  showToast(title, message);
+
+  // sound
+  if (audioUnlocked) {
+    sound.currentTime = 0;
+    sound.play().catch(() => {});
+  }
+
+  // browser notif optional
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification(title, {
+      body: message
+    });
+  }
+}
+
+if ("Notification" in window && Notification.permission === "default") {
+  Notification.requestPermission();
+}
+
+// ================= WS =================
+ws.onopen = () => {
+  ws.send(JSON.stringify({
+    type: "join",
+    username
+  }));
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  const chat = document.getElementById("chat");
+
+  const div = document.createElement("div");
+
+  if (data.type === "system") {
+    div.className = "system";
+    div.textContent = data.message;
+  }
+
+  if (data.type === "chat") {
+    if (data.username === username) {
+      div.className = "bubble me";
+      div.textContent = data.message;
+    } else {
+      div.className = "bubble other";
+      div.textContent = data.username + ": " + data.message;
+
+      notify(data.username, data.message);
+    }
+  }
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+};
+
+// ================= SEND =================
+function send() {
+  unlockAudio();
+
+  const input = document.getElementById("msg");
+
+  if (input.value.trim() !== "") {
+    ws.send(JSON.stringify({
+      type: "chat",
+      message: input.value
+    }));
+
+    input.value = "";
+  }
+}
+
+document.getElementById("msg").addEventListener("focus", unlockAudio);
+
+</script>
+
+</body>
+</html>
